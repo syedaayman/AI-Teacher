@@ -28,50 +28,61 @@ export default function AdaptivePage() {
     setError(null);
 
     try {
-      // 1. Construct EvaluationResult
+      const qId = session.selectedQuestion?.question_id || `qst_sim_${Date.now()}`;
+      // 1. Construct valid EvaluationResult matching backend schema
       const evaluationResult = {
-        evaluation_id: `eval_${Date.now()}`,
-        question_id: session.selectedQuestion?.question_id || 'qst_sample_01',
+        evaluation_id: session.evaluationResult?.evaluation_id || `eval_${Date.now()}`,
+        question_id: qId,
         concept_id: conceptId,
         correctness: isCorrect,
         score: Number(evalScore),
         confidence: 0.95,
-        expected_answer: 'Expected Answer',
-        student_answer: 'Student Answer',
+        expected_answer: 'Reference correct answer formulation',
+        student_answer: 'Learner submitted answer',
+        concepts_tested: [conceptId],
+        concepts_demonstrated: isCorrect ? [conceptId] : [],
+        concepts_missing: !isCorrect ? [conceptId] : [],
         evidence: isCorrect ? 'Demonstrated clear conceptual understanding' : 'Struggled with core principle',
-        feedback: isCorrect ? 'Excellent job!' : 'Needs review',
+        feedback: isCorrect ? 'Excellent job!' : 'Needs targeted conceptual review',
       };
 
-      // 2. Construct Misconception Analysis if simulated
+      // 2. Construct valid MisconceptionAnalysis matching backend schema if enabled
       let misconceptionAnalysis = null;
       if (hasPrereqMisconception) {
         misconceptionAnalysis = {
-          analysis_id: `misc_analysis_${Date.now()}`,
-          has_misconception: true,
-          confidence: 0.9,
+          detected: true,
+          overall_confidence: 0.9,
           summary: 'Prerequisite gap detected in foundational concept',
           misconceptions: [
             {
               misconception_id: `misc_prereq_${Date.now()}`,
-              description: 'Missing foundational concept',
-              remediation_strategy: 'Review prerequisite material',
+              concept_id: conceptId,
+              description: 'Missing foundational concept required for current topic',
+              evidence: 'Failed to demonstrate prerequisite understanding',
               severity: 'high',
-              prerequisite_concept_id: prereqConceptId,
+              confidence: 0.9,
+              affected_concept_ids: [prereqConceptId],
+              source_question_id: qId,
+              recommended_focus: 'Review prerequisite material',
             },
           ],
         };
       } else if (hasConceptualMisconception) {
         misconceptionAnalysis = {
-          analysis_id: `misc_analysis_${Date.now()}`,
-          has_misconception: true,
-          confidence: 0.85,
+          detected: true,
+          overall_confidence: 0.85,
           summary: 'Direct conceptual confusion in current concept',
           misconceptions: [
             {
               misconception_id: `misc_cpt_${Date.now()}`,
-              description: 'Confusing assignment with equality',
-              remediation_strategy: 'Clarify operator differences',
+              concept_id: conceptId,
+              description: 'Confusing assignment with equality comparison',
+              evidence: 'Used assignment operator when comparison was expected',
               severity: 'medium',
+              confidence: 0.85,
+              affected_concept_ids: [conceptId],
+              source_question_id: qId,
+              recommended_focus: 'Clarify assignment vs comparison operator semantics',
             },
           ],
         };
@@ -93,7 +104,7 @@ export default function AdaptivePage() {
         concept_mastery: updatedMastery,
         misconception_analysis: misconceptionAnalysis,
         concept_graph: session.conceptGraph || null,
-        learner_id: session.learnerId,
+        learner_id: session.learnerId || 'dev_learner_01',
         session_id: 'session_dev_01',
       });
 
@@ -104,7 +115,7 @@ export default function AdaptivePage() {
         adaptationDecision: decision,
       });
     } catch (err) {
-      setError(err.message || 'Adaptive simulation failed');
+      setError(err.formattedMessage || err.message || 'Adaptive simulation failed');
     } finally {
       setLoading(false);
     }
@@ -115,14 +126,16 @@ export default function AdaptivePage() {
       <div className="page-header">
         <h1 className="page-title">⚙️ Adaptive Learning Engine (Phase 6)</h1>
         <p className="page-description">
-          Deterministic mastery updating ($0.6 \times \text{previous} + 0.4 \times \text{current}$) and 6-tier pedagogical decision engine.
+          Deterministic mastery updating (0.6 × previous + 0.4 × current) and 6-tier pedagogical decision engine.
         </p>
       </div>
 
       {error && (
         <div className="alert alert-error">
           <span>❌</span>
-          <div>{error}</div>
+          <div>
+            <pre style={{ margin: 0, whiteSpace: 'pre-wrap', fontFamily: 'monospace', fontSize: '12px' }}>{error}</pre>
+          </div>
         </div>
       )}
 

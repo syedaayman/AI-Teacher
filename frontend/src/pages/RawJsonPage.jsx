@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { getApiLogs, subscribeToApiLogs } from '../services/api';
+import { getApiLogs, subscribeToApiLogs, getApiBaseUrl } from '../services/api';
 
 const API_CONTRACTS = [
   {
@@ -70,7 +70,7 @@ const API_CONTRACTS = [
     path: '/api/v1/assessment/detect-misconceptions',
     desc: 'Diagnose genuine conceptual or prerequisite flaws from student answers',
     req: 'MisconceptionDetectionRequest { question, student_answer, evaluation_result, concept, concept_graph? }',
-    res: 'MisconceptionAnalysis { analysis_id, has_misconception, summary, misconceptions: List[Misconception] }',
+    res: 'MisconceptionAnalysis { detected, summary, overall_confidence, misconceptions: List[Misconception] }',
   },
   {
     method: 'POST',
@@ -132,6 +132,9 @@ export default function RawJsonPage() {
         <p className="page-description">
           Inspect raw JSON request and response payloads exchanged between the dashboard and FastAPI.
         </p>
+        <div style={{ marginTop: '6px', fontSize: '12px', color: 'var(--text-muted)' }}>
+          Active API Base Host: <code style={{ color: '#38bdf8' }}>{getApiBaseUrl()}</code>
+        </div>
       </div>
 
       <div className="grid-2">
@@ -141,7 +144,7 @@ export default function RawJsonPage() {
             <span>Recent API Calls ({logs.length})</span>
           </div>
 
-          <div style={{ maxHeight: '480px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+          <div style={{ maxHeight: '520px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '6px' }}>
             {logs.length === 0 ? (
               <div style={{ color: 'var(--text-muted)', fontSize: '13px' }}>
                 No API calls captured yet. Perform actions across dashboard pages to record transactions.
@@ -160,18 +163,31 @@ export default function RawJsonPage() {
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'space-between',
+                    gap: '8px',
                   }}
                 >
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', overflow: 'hidden' }}>
                     <span className={`phase-badge ${log.method === 'GET' ? 'badge-available' : 'badge-pass'}`}>
                       {log.method}
                     </span>
-                    <span style={{ fontFamily: 'monospace', fontSize: '12px' }}>{log.endpoint}</span>
+                    <span
+                      style={{
+                        fontFamily: 'monospace',
+                        fontSize: '11px',
+                        whiteSpace: 'nowrap',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        maxWidth: '260px',
+                      }}
+                      title={log.url}
+                    >
+                      {log.url}
+                    </span>
                   </div>
 
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexShrink: 0 }}>
                     <span className={`badge ${log.ok ? 'badge-pass' : 'badge-fail'}`}>
-                      {log.responseStatus || 'ERR'}
+                      {log.responseStatus ? log.responseStatus : 'ERR'}
                     </span>
                     <span style={{ fontSize: '10px', color: 'var(--text-muted)' }}>{log.durationMs}ms</span>
                   </div>
@@ -184,17 +200,32 @@ export default function RawJsonPage() {
         {/* SELECTED PAYLOAD DETAILS */}
         {selectedLog ? (
           <div className="card">
-            <div className="card-title">
+            <div className="card-title" style={{ flexWrap: 'wrap', gap: '8px' }}>
               <span>Payload Inspector</span>
-              <span className="badge badge-available">
-                {selectedLog.method} {selectedLog.endpoint}
+              <span className={`badge ${selectedLog.ok ? 'badge-pass' : 'badge-fail'}`}>
+                {selectedLog.method} {selectedLog.url}
               </span>
             </div>
 
             <div style={{ marginBottom: '14px', fontSize: '12px', color: 'var(--text-secondary)' }}>
-              Status: <strong>{selectedLog.responseStatus}</strong> | Duration: <strong>{selectedLog.durationMs}ms</strong> | Time:{' '}
+              Target URL: <code style={{ color: '#38bdf8' }}>{selectedLog.url}</code>
+              <br />
+              Status: <strong>{selectedLog.responseStatus || 'Connection/Network Failure (0)'}</strong> | Duration:{' '}
+              <strong>{selectedLog.durationMs}ms</strong> | Time:{' '}
               {new Date(selectedLog.timestamp).toLocaleTimeString()}
             </div>
+
+            {/* ERROR DIAGNOSTICS IF ANY */}
+            {!selectedLog.ok && selectedLog.errorDetails && (
+              <div className="alert alert-error" style={{ marginBottom: '14px', fontSize: '12px' }}>
+                <div>
+                  <strong>Request Failed:</strong>
+                  <pre style={{ margin: '4px 0 0 0', whiteSpace: 'pre-wrap', fontFamily: 'monospace', fontSize: '11px' }}>
+                    {JSON.stringify(selectedLog.errorDetails, null, 2)}
+                  </pre>
+                </div>
+              </div>
+            )}
 
             {/* REQUEST */}
             <div style={{ marginBottom: '16px' }}>
@@ -209,7 +240,7 @@ export default function RawJsonPage() {
                   {copiedType === 'req' ? '✓ Copied!' : '📋 Copy Request'}
                 </button>
               </div>
-              <div className="code-block" style={{ maxHeight: '180px' }}>
+              <div className="code-block" style={{ maxHeight: '160px' }}>
                 {selectedLog.requestPayload
                   ? JSON.stringify(selectedLog.requestPayload, null, 2)
                   : '[No request body]'}
@@ -229,7 +260,7 @@ export default function RawJsonPage() {
                   {copiedType === 'res' ? '✓ Copied!' : '📋 Copy Response'}
                 </button>
               </div>
-              <div className="code-block" style={{ maxHeight: '200px' }}>
+              <div className="code-block" style={{ maxHeight: '180px' }}>
                 {JSON.stringify(selectedLog.responsePayload, null, 2)}
               </div>
             </div>
@@ -244,7 +275,7 @@ export default function RawJsonPage() {
       {/* API CONTRACTS TABLE */}
       <div className="card" style={{ marginTop: '20px' }}>
         <div className="card-title">
-          <span>Implemented API Contracts (Phase 1–7 Thin Adapters)</span>
+          <span>Implemented API Contracts (FastAPI Backend /api/v1/...)</span>
         </div>
 
         <div className="table-container">
@@ -252,7 +283,7 @@ export default function RawJsonPage() {
             <thead>
               <tr>
                 <th>Method</th>
-                <th>Endpoint</th>
+                <th>Full Endpoint</th>
                 <th>Description</th>
                 <th>Request Model</th>
                 <th>Response Model</th>

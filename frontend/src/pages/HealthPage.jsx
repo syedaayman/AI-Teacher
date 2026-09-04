@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { api } from '../services/api';
+import { api, getApiBaseUrl } from '../services/api';
 
 const SUBSYSTEMS = [
   { name: 'FastAPI Backend', endpoint: '/api/v1/health', type: 'health' },
@@ -30,7 +30,7 @@ export default function HealthPage() {
         // Non-critical if RAG stats fails
       }
     } catch (err) {
-      setError(err.message || 'Failed to connect to backend');
+      setError(err.formattedMessage || err.message || 'Failed to connect to backend');
       setHealthData(null);
     } finally {
       setLoading(false);
@@ -50,15 +50,21 @@ export default function HealthPage() {
         <p className="page-description">
           Inspect FastAPI backend connectivity, service metadata, and subsystem availability.
         </p>
+        <div style={{ marginTop: '6px', fontSize: '12px', color: 'var(--text-muted)' }}>
+          Active API Base Host: <code style={{ color: '#38bdf8' }}>{getApiBaseUrl()}</code>
+        </div>
       </div>
 
       {error && (
         <div className="alert alert-error">
           <span>❌</span>
-          <div>
-            <strong>Connection Error:</strong> {error}
-            <div style={{ marginTop: '4px', fontSize: '12px' }}>
-              Ensure the FastAPI server is running at <code>http://localhost:8000</code>.
+          <div style={{ width: '100%' }}>
+            <strong>Connection Error:</strong>
+            <pre style={{ margin: '6px 0 0 0', whiteSpace: 'pre-wrap', fontFamily: 'monospace', fontSize: '11px' }}>
+              {error}
+            </pre>
+            <div style={{ marginTop: '8px', fontSize: '12px', color: 'var(--text-secondary)' }}>
+              Ensure the FastAPI server is running with: <code>uvicorn main:app --host 0.0.0.0 --port 8000</code>
             </div>
           </div>
         </div>

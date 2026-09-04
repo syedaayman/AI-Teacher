@@ -127,7 +127,7 @@ APP_ENV=development
 DEBUG=true
 
 GEMINI_API_KEY=your_gemini_api_key_here
-GEMINI_MODEL=gemini-2.5-flash
+GEMINI_MODEL=gemini-flash-latest
 GEMINI_EMBEDDING_MODEL=gemini-embedding-001
 
 DATABASE_URL=sqlite+aiosqlite:///./ai_brain.db
@@ -136,15 +136,36 @@ CHROMA_PERSIST_DIRECTORY=./chroma_data
 
 ---
 
-## Running the API
+## Running the Backend & Frontend
 
-Start the local development server:
+### 1. Start the FastAPI Backend
 ```bash
-uvicorn main:app --reload --host 0.0.0.0 --port 8000
-```
+# Windows PowerShell / CMD:
+.venv\Scripts\python -m uvicorn main:app --host 0.0.0.0 --port 8000 --reload
 
-Interactive API documentation (Swagger UI) is available at:
-`http://localhost:8000/docs`
+# Linux / macOS:
+uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+```
+Interactive API documentation (Swagger UI): `http://localhost:8000/docs` (or `http://<your-lan-ip>:8000/docs`).
+
+### 2. Start the Developer/Test Frontend Dashboard
+```bash
+cd frontend
+npm install
+npm run dev -- --host
+```
+The dashboard will be available at:
+- Local: `http://localhost:5173`
+- Network/LAN: `http://<your-lan-ip>:5173` (e.g. `http://192.168.0.107:5173`)
+
+### 3. Frontend Environment Configuration (`frontend/.env`)
+```ini
+# For standard localhost development:
+VITE_API_BASE_URL=http://127.0.0.1:8000
+
+# When accessing frontend from other devices on your LAN:
+# VITE_API_BASE_URL=http://<your-lan-ip>:8000
+```
 
 ---
 

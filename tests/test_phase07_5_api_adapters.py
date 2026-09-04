@@ -15,7 +15,7 @@ from app.schemas.assessment import (
     StudentAnswer,
 )
 from app.schemas.learner import SupportedLanguage
-from app.schemas.lesson import Concept, DifficultyLevel
+from app.schemas.lesson import Concept, ConceptGraph, DifficultyLevel
 
 
 @pytest.fixture
@@ -126,6 +126,20 @@ async def test_05_concepts_and_graph_endpoints(client):
     assert graph_data["topological_order"][0]["concept_id"] == "cpt_01"
 
 
+def test_09_concepts_extract_validation_400(client):
+    """Verify 400 Bad Request when neither topic nor document is provided."""
+    res = client.post("/api/v1/concepts/extract", json={})
+    assert res.status_code == 400
+    assert "Either 'topic' or 'document'" in res.json()["detail"]
+
+
+def test_10_lessons_plan_validation_400(client):
+    """Verify 400 Bad Request when neither topic nor document is provided for planning."""
+    res = client.post("/api/v1/lessons/plan", json={})
+    assert res.status_code == 400
+    assert "Either 'topic' or 'document'" in res.json()["detail"]
+
+
 # ====================================================================
 # Assessment API Adapters
 # ====================================================================
@@ -205,6 +219,101 @@ def test_07_adaptive_mastery_and_decide(client):
     assert decide_data["target_difficulty"] == "intermediate"
 
 
+def test_12_adaptive_decide_with_misconception(client):
+    """Verify adaptive decision correctly triggers review_prerequisite when misconception is present."""
+    eval_res = {
+        "evaluation_id": "eval_misc_01",
+        "question_id": "qst_sort_01",
+        "concept_id": "cpt_sorting",
+        "correctness": False,
+        "score": 0.20,
+        "confidence": 0.95,
+        "expected_answer": "Sorting algorithms arrange elements",
+        "student_answer": "Arrays cannot be ordered",
+        "evidence": "Prerequisite misconception in array basics",
+        "feedback": "Review array storage",
+    }
+    mastery = {
+        "concept_id": "cpt_sorting",
+        "mastery_score": 0.20,
+        "mastery_level": "emerging",
+        "attempts": 1,
+        "correct_attempts": 0,
+        "incorrect_attempts": 1,
+        "partial_attempts": 0,
+        "consecutive_correct": 0,
+        "consecutive_failures": 1,
+        "last_updated": "2026-09-04T00:00:00Z",
+        "history": [],
+    }
+    misc_analysis = {
+        "detected": True,
+        "overall_confidence": 0.9,
+        "summary": "Prerequisite gap detected in arrays",
+        "misconceptions": [
+            {
+                "misconception_id": "misc_arr_01",
+                "concept_id": "cpt_sorting",
+                "description": "Missing array contiguous index concept",
+                "evidence": "Assumes arrays are unsortable",
+                "severity": "high",
+                "confidence": 0.95,
+                "affected_concept_ids": ["cpt_arrays"],
+                "source_question_id": "qst_sort_01",
+                "recommended_focus": "Review array memory structures",
+            }
+        ],
+    }
+    graph = {
+        "concepts": [
+            {
+                "concept_id": "cpt_arrays",
+                "name": "Arrays",
+                "description": "Array storage",
+                "difficulty": "beginner",
+                "learning_objectives": ["Define arrays"],
+                "prerequisite_concept_ids": [],
+            },
+            {
+                "concept_id": "cpt_sorting",
+                "name": "Sorting",
+                "description": "Array sorting",
+                "difficulty": "beginner",
+                "learning_objectives": ["Explain sorting"],
+                "prerequisite_concept_ids": ["cpt_arrays"],
+            },
+        ],
+        "relationships": [
+            {
+                "source_concept_id": "cpt_arrays",
+                "target_concept_id": "cpt_sorting",
+                "relationship_type": "prerequisite",
+            }
+        ],
+    }
+
+    decide_payload = {
+        "current_concept_id": "cpt_sorting",
+        "current_difficulty": "beginner",
+        "evaluation_result": eval_res,
+        "concept_mastery": mastery,
+        "misconception_analysis": misc_analysis,
+        "concept_graph": graph,
+        "learner_id": "dev_learner_01",
+    }
+    res = client.post("/api/v1/adaptive/decide", json=decide_payload)
+    assert res.status_code == 200
+    data = res.json()
+    assert data["action"] == "review_prerequisite"
+    assert data["target_concept_id"] == "cpt_arrays"
+
+
+def test_13_adaptive_request_validation_422(client):
+    """Verify 422 Unprocessable Entity when required schema fields are missing."""
+    res = client.post("/api/v1/adaptive/decide", json={"current_concept_id": "cpt_01"})
+    assert res.status_code == 422
+
+
 # ====================================================================
 # Learner Profile API Adapters
 # ====================================================================
@@ -256,3 +365,9 @@ def test_08_learner_profile_lifecycle(client):
     assert res_asm.status_code == 200
     assert res_asm.json()["assessment_count"] == 1
     assert res_asm.json()["average_score"] == 0.85
+
+
+def test_11_learner_profile_not_found_404(client):
+    """Verify 404 Not Found when retrieving non-existent learner profile."""
+    res = client.get("/api/v1/learner-profile/non_existent_learner_id_99999")
+    assert res.status_code == 404

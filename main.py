@@ -33,10 +33,11 @@ def create_application() -> FastAPI:
         lifespan=lifespan,
     )
 
-    # CORS Middleware
+    # CORS Middleware with regex support for LAN and localhost development
     app.add_middleware(
         CORSMiddleware,
         allow_origins=settings.CORS_ORIGINS,
+        allow_origin_regex=r"^https?://(localhost|127\.0\.0\.1|192\.168\.\d+\.\d+|10\.\d+\.\d+\.\d+|172\.(1[6-9]|2\d|3[0-1])\.\d+\.\d+)(:\d+)?$",
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],

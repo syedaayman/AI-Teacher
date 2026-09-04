@@ -50,23 +50,32 @@ class GeminiClient:
         model: Optional[str] = None,
     ) -> str:
         """Generate plain text from Gemini model."""
+        import asyncio
         client = self._get_client()
         target_model = model or settings.GEMINI_MODEL
-        try:
-            from google.genai import types
+        last_err = None
+        for attempt in range(3):
+            try:
+                from google.genai import types
 
-            config = types.GenerateContentConfig(
-                system_instruction=system_instruction,
-            ) if system_instruction else None
+                config = types.GenerateContentConfig(
+                    system_instruction=system_instruction,
+                ) if system_instruction else None
 
-            response = client.models.generate_content(
-                model=target_model,
-                contents=prompt,
-                config=config,
-            )
-            return response.text or ""
-        except Exception as e:
-            raise LLMServiceError(f"Gemini text generation failed: {str(e)}") from e
+                response = await client.aio.models.generate_content(
+                    model=target_model,
+                    contents=prompt,
+                    config=config,
+                )
+                return response.text or ""
+            except Exception as e:
+                last_err = e
+                err_str = str(e).lower()
+                if ("503" in err_str or "unavailable" in err_str or "429" in err_str or "resource_exhausted" in err_str) and attempt < 2:
+                    await asyncio.sleep(1.5 * (attempt + 1))
+                    continue
+                raise LLMServiceError(f"Gemini text generation failed: {str(e)}") from e
+        raise LLMServiceError(f"Gemini text generation failed: {str(last_err)}")
 
     async def generate_structured(
         self,
@@ -76,33 +85,42 @@ class GeminiClient:
         model: Optional[str] = None,
     ) -> T:
         """Generate structured output validated against a Pydantic schema."""
+        import asyncio
         client = self._get_client()
         target_model = model or settings.GEMINI_MODEL
-        try:
-            from google.genai import types
+        last_err = None
+        for attempt in range(3):
+            try:
+                from google.genai import types
 
-            config = types.GenerateContentConfig(
-                response_mime_type="application/json",
-                response_schema=response_schema,
-                system_instruction=system_instruction,
-            )
+                config = types.GenerateContentConfig(
+                    response_mime_type="application/json",
+                    response_schema=response_schema,
+                    system_instruction=system_instruction,
+                )
 
-            response = client.models.generate_content(
-                model=target_model,
-                contents=prompt,
-                config=config,
-            )
-            
-            # If parsed response object is available directly from SDK
-            if hasattr(response, "parsed") and response.parsed is not None:
-                if isinstance(response.parsed, response_schema):
-                    return response.parsed
-                return response_schema.model_validate(response.parsed)
+                response = await client.aio.models.generate_content(
+                    model=target_model,
+                    contents=prompt,
+                    config=config,
+                )
+                
+                # If parsed response object is available directly from SDK
+                if hasattr(response, "parsed") and response.parsed is not None:
+                    if isinstance(response.parsed, response_schema):
+                        return response.parsed
+                    return response_schema.model_validate(response.parsed)
 
-            # Fallback to validating raw JSON text
-            return response_schema.model_validate_json(response.text)
-        except Exception as e:
-            raise LLMServiceError(f"Gemini structured generation failed: {str(e)}") from e
+                # Fallback to validating raw JSON text
+                return response_schema.model_validate_json(response.text)
+            except Exception as e:
+                last_err = e
+                err_str = str(e).lower()
+                if ("503" in err_str or "unavailable" in err_str or "429" in err_str or "resource_exhausted" in err_str) and attempt < 2:
+                    await asyncio.sleep(1.5 * (attempt + 1))
+                    continue
+                raise LLMServiceError(f"Gemini structured generation failed: {str(e)}") from e
+        raise LLMServiceError(f"Gemini structured generation failed: {str(last_err)}")
 
     async def embed_text(
         self,
@@ -132,7 +150,7 @@ class GeminiClient:
         client = self._get_client()
         target_model = model or settings.GEMINI_EMBEDDING_MODEL
         try:
-            response = client.models.embed_content(
+            response = await client.aio.models.embed_content(
                 model=target_model,
                 contents=texts,
             )
@@ -141,16 +159,8 @@ class GeminiClient:
                 for emb in response.embeddings:
                     if hasattr(emb, "values"):
                         results.append(list(emb.values))
-                    elif isinstance(emb, (list, tuple)):
-                        results.append(list(emb))
                     else:
-                        results.append(list(getattr(emb, "embedding", [])))
-            elif hasattr(response, "embedding"):
-                emb = response.embedding
-                if hasattr(emb, "values"):
-                    results.append(list(emb.values))
-                else:
-                    results.append(list(emb))
+                        results.append(list(emb))
             return results
         except Exception as e:
             raise LLMServiceError(f"Gemini embedding generation failed: {str(e)}") from e

@@ -273,7 +273,7 @@ class ConceptService:
                         existing.prerequisite_concept_ids.append(pid)
                 for rid in related_ids:
                     if rid not in existing.related_concept_ids:
-                        existing.related_concept_ids.append(rel_id)
+                        existing.related_concept_ids.append(rid)
                 for chkid in source_chunk_ids:
                     if chkid not in existing.source_chunk_ids:
                         existing.source_chunk_ids.append(chkid)

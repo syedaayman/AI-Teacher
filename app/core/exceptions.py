@@ -170,7 +170,7 @@ class InvalidLearnerProfileError(LearnerProfileError):
     pass
 
 
-class LearnerNotFoundError(LearnerProfileError):
+class LearnerNotFoundError(ResourceNotFoundError, LearnerProfileError):
     """Raised when querying or updating a non-existent learner profile."""
     pass
 

@@ -62,7 +62,7 @@ export default function AssessmentPage() {
         selectedQuestion: qList[0] || null,
       });
     } catch (err) {
-      setGenError(err.message || 'Question generation failed');
+      setGenError(err.formattedMessage || err.message || 'Question generation failed');
     } finally {
       setLoadingGen(false);
     }
@@ -95,7 +95,7 @@ export default function AssessmentPage() {
         evaluationResult: res,
       });
     } catch (err) {
-      setEvalError(err.message || 'Answer evaluation failed');
+      setEvalError(err.formattedMessage || err.message || 'Answer evaluation failed');
     } finally {
       setLoadingEval(false);
     }
@@ -130,7 +130,7 @@ export default function AssessmentPage() {
         misconceptionAnalysis: mRes,
       });
     } catch (err) {
-      setMiscError(err.message || 'Misconception detection failed');
+      setMiscError(err.formattedMessage || err.message || 'Misconception detection failed');
     } finally {
       setLoadingMisc(false);
     }
@@ -160,7 +160,9 @@ export default function AssessmentPage() {
         {genError && (
           <div className="alert alert-error">
             <span>❌</span>
-            <div>{genError}</div>
+            <div>
+              <pre style={{ margin: 0, whiteSpace: 'pre-wrap', fontFamily: 'monospace', fontSize: '12px' }}>{genError}</pre>
+            </div>
           </div>
         )}
 
@@ -281,7 +283,9 @@ export default function AssessmentPage() {
           {evalError && (
             <div className="alert alert-error">
               <span>❌</span>
-              <div>{evalError}</div>
+              <div>
+                <pre style={{ margin: 0, whiteSpace: 'pre-wrap', fontFamily: 'monospace', fontSize: '12px' }}>{evalError}</pre>
+              </div>
             </div>
           )}
 
@@ -352,8 +356,8 @@ export default function AssessmentPage() {
         <div className="card">
           <div className="card-title">
             <span>Section C: Misconception Analysis</span>
-            <span className={`badge ${miscResult.has_misconception ? 'badge-warning' : 'badge-pass'}`}>
-              {miscResult.has_misconception ? 'Misconception Diagnosed' : 'No Misconception'}
+            <span className={`badge ${miscResult.detected ? 'badge-warning' : 'badge-pass'}`}>
+              {miscResult.detected ? 'Misconception Diagnosed' : 'No Misconception'}
             </span>
           </div>
 
@@ -361,7 +365,7 @@ export default function AssessmentPage() {
             <div><span style={{ color: 'var(--text-secondary)' }}>Summary:</span> {miscResult.summary}</div>
             <div>
               <span style={{ color: 'var(--text-secondary)' }}>Confidence:</span>{' '}
-              {typeof miscResult.confidence === 'number' ? miscResult.confidence.toFixed(2) : 'N/A'}
+              {typeof miscResult.overall_confidence === 'number' ? miscResult.overall_confidence.toFixed(2) : 'N/A'}
             </div>
 
             {miscResult.misconceptions && miscResult.misconceptions.length > 0 && (
@@ -373,10 +377,15 @@ export default function AssessmentPage() {
                       <span className="badge badge-warning">{m.severity} severity</span>
                       <strong>{m.description}</strong>
                     </div>
-                    <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>Remediation: {m.remediation_strategy}</div>
-                    {m.prerequisite_concept_id && (
+                    {m.evidence && <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>Evidence: {m.evidence}</div>}
+                    {m.recommended_focus && (
+                      <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '2px' }}>
+                        Remediation Focus: {m.recommended_focus}
+                      </div>
+                    )}
+                    {m.affected_concept_ids?.length > 0 && (
                       <div style={{ fontSize: '11px', color: '#f87171', marginTop: '2px' }}>
-                        Prerequisite Gap: <code style={{ color: '#f87171' }}>{m.prerequisite_concept_id}</code>
+                        Affected Concepts: <code style={{ color: '#f87171' }}>{m.affected_concept_ids.join(', ')}</code>
                       </div>
                     )}
                   </div>

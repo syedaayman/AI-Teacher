@@ -19,7 +19,7 @@ class Settings(BaseSettings):
 
     # Gemini LLM & Embeddings Configuration
     GEMINI_API_KEY: Optional[str] = Field(default=None, description="Google Gemini API key")
-    GEMINI_MODEL: str = Field(default="gemini-2.5-flash", description="Primary generative model identifier")
+    GEMINI_MODEL: str = Field(default="gemini-3.6-flash", description="Primary generative model identifier")
     GEMINI_EMBEDDING_MODEL: str = Field(default="gemini-embedding-001", description="Primary embedding model identifier")
 
     # Relational Database Configuration
@@ -36,7 +36,14 @@ class Settings(BaseSettings):
 
     # CORS configuration for Member 2 Frontend integration
     CORS_ORIGINS: List[str] = Field(
-        default=["*"],
+        default=[
+            "http://localhost:5173",
+            "http://127.0.0.1:5173",
+            "http://localhost:3000",
+            "http://127.0.0.1:3000",
+            "http://localhost:8080",
+            "http://127.0.0.1:8080",
+        ],
         description="Allowed CORS origin domains",
     )
 
