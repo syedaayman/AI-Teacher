@@ -116,6 +116,7 @@ class AdaptiveEngine:
         mastery_score = concept_mastery.mastery_score
         mastery_level = concept_mastery.mastery_level
 
+
         # Extract active misconceptions with actionable confidence
         active_misconceptions = []
         if misconception_analysis and misconception_analysis.detected:
@@ -463,9 +464,33 @@ class AdaptiveEngine:
             confidence=round(concept_mastery.confidence, 4),
         )
 
+    def determine_adaptation(
+        self,
+        current_concept_id: str,
+        current_difficulty: DifficultyLevel,
+        evaluation_result: EvaluationResult,
+        concept_mastery: ConceptMastery,
+        misconception_analysis: Optional[MisconceptionAnalysis] = None,
+        concept_graph: Optional[ConceptGraph] = None,
+        learner_id: Optional[str] = None,
+        session_id: Optional[str] = None,
+    ) -> AdaptationDecision:
+        """Canonical alias for decide_next_action to support TeacherAgent and all callers."""
+        return self.decide_next_action(
+            current_concept_id=current_concept_id,
+            current_difficulty=current_difficulty,
+            evaluation_result=evaluation_result,
+            concept_mastery=concept_mastery,
+            misconception_analysis=misconception_analysis,
+            concept_graph=concept_graph,
+            learner_id=learner_id,
+            session_id=session_id,
+        )
+
     # ----------------------------------------------------------------
     # Graph & Helper Utilities
     # ----------------------------------------------------------------
+
 
     def _get_concept_prerequisites(
         self,

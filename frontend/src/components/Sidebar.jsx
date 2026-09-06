@@ -1,40 +1,120 @@
 import React from 'react';
+import { useClassroom } from '../context/ClassroomContext';
 
-const NAV_ITEMS = [
-  { id: 'health', label: '1. System Health', badge: 'P1' },
-  { id: 'materials', label: '2. Material Processing', badge: 'P2' },
-  { id: 'rag', label: '3. RAG Retrieval', badge: 'P3' },
-  { id: 'concepts', label: '4. Concepts & Graph', badge: 'P4' },
-  { id: 'lessons', label: '5. Lesson Planner', badge: 'P4' },
-  { id: 'assessment', label: '6. Assessment', badge: 'P5' },
-  { id: 'adaptive', label: '7. Adaptive Engine', badge: 'P6' },
-  { id: 'learner', label: '8. Learner Profile', badge: 'P7' },
-  { id: 'pipeline', label: '9. Guided Pipeline', badge: 'E2E' },
-  { id: 'raw-json', label: '10. Raw API / JSON', badge: 'Logs' },
+/**
+ * Sidebar Component
+ * Perfectly matches the reference design:
+ * - Brand: AI Teacher ("Learn smarter, your way") with purple book icon
+ * - Navigation: Home, Learn, My Learning, Assessments, Revision
+ * - Active item: Soft lilac pill background with deep purple icon/text
+ * - Bottom illustration: Potted plant with "Small Steps Big Progress 💗"
+ */
+const STUDENT_NAV_ITEMS = [
+  { id: 'home', label: 'Home', icon: '🏠' },
+  { id: 'my-learning', label: 'My Learning', icon: '📊' },
+  { id: 'learn', label: 'Start Learning', icon: '🎓' },
+  { id: 'assessments', label: 'Assessments', icon: '📝' },
+  { id: 'revision', label: 'Revision', icon: '🔄' },
 ];
 
-export default function Sidebar({ activeTab, onSelectTab }) {
+export default function Sidebar({ activeTab, onSelectTab, onSignOut }) {
+  const { sessionId, status } = useClassroom();
+  const hasActiveSession = Boolean(sessionId && status === 'active');
+
   return (
-    <aside className="sidebar">
-      <div className="sidebar-header">
-        <div className="sidebar-title">
-          <span>🧠</span> AI Brain Dashboard
+    <aside className="production-sidebar" aria-label="Main Navigation">
+      {/* 1. Brand Logo */}
+      <div
+        className="sidebar-brand-box"
+        onClick={() => onSelectTab('home')}
+        role="button"
+        tabIndex={0}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') onSelectTab('home');
+        }}
+      >
+        <div className="brand-book-icon" aria-hidden="true">
+          <span>📖</span>
         </div>
-        <div className="sidebar-subtitle">Member 1 Dev / Test Console</div>
+        <div className="brand-titles">
+          <span className="brand-main-title">AI Teacher</span>
+          <span className="brand-sub-title">Learn smarter, your way</span>
+        </div>
       </div>
 
-      <ul className="sidebar-nav">
-        {NAV_ITEMS.map((item) => (
-          <li
-            key={item.id}
-            className={`nav-item ${activeTab === item.id ? 'active' : ''}`}
-            onClick={() => onSelectTab(item.id)}
-          >
-            <span>{item.label}</span>
-            <span className="phase-badge">{item.badge}</span>
-          </li>
-        ))}
-      </ul>
+      {/* 2. Navigation Items */}
+      <nav className="sidebar-nav-container">
+        <ul className="sidebar-nav-list">
+          {STUDENT_NAV_ITEMS.map((item) => {
+            const isActive =
+              activeTab === item.id ||
+              (item.id === 'learn' && (activeTab === 'setup' || activeTab === 'study-materials'));
+
+            return (
+              <li key={item.id} className="nav-list-item">
+                <button
+                  type="button"
+                  className={`nav-item-btn ${isActive ? 'active' : ''}`}
+                  onClick={() => onSelectTab(item.id)}
+                >
+                  <span className="nav-icon">{item.icon}</span>
+                  <span className="nav-label">{item.label}</span>
+                </button>
+              </li>
+            );
+          })}
+
+          {/* Active Classroom indicator if class is live */}
+          {hasActiveSession && (
+            <li className="nav-list-item live-class-item">
+              <button
+                type="button"
+                className={`nav-item-btn live-btn ${activeTab === 'classroom' ? 'active' : ''}`}
+                onClick={() => onSelectTab('classroom')}
+              >
+                <span className="nav-icon">🏫</span>
+                <span className="nav-label">Live Classroom</span>
+                <span className="live-pulsar-dot" />
+              </button>
+            </li>
+          )}
+        </ul>
+      </nav>
+
+      {/* 3. Bottom Plant Decoration ("Small Steps Big Progress 💗") */}
+      <div className="sidebar-bottom-plant-card">
+        <div className="plant-image-wrapper">
+          <img
+            src="/images/potted_plant.jpg"
+            alt="Small plant decoration"
+            className="sidebar-plant-img"
+            onError={(e) => {
+              e.target.style.display = 'none';
+            }}
+          />
+        </div>
+        <p className="sidebar-plant-caption">
+          Small<br />
+          Steps<br />
+          Big Progress 💗
+        </p>
+      </div>
+
+      {/* 4. Exit / Sign Out Button */}
+      <div className="sidebar-auth-exit">
+        <button
+          type="button"
+          className="sidebar-signout-btn"
+          onClick={() => {
+            if (onSignOut) onSignOut();
+            else onSelectTab('landing');
+          }}
+          title="Sign out and return to landing page"
+        >
+          <span className="signout-icon">🚪</span>
+          <span className="signout-text">Sign Out</span>
+        </button>
+      </div>
     </aside>
   );
 }

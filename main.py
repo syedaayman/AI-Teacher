@@ -10,18 +10,24 @@ from app.core.exceptions import (
     AIBrainException,
     ConfigurationError,
     DatabaseError,
+    LLMQuotaExceededError,
     LLMServiceError,
     ResourceNotFoundError,
 )
 from app.schemas.common import ApiErrorDetail, ApiErrorResponse
 
 
+from app.db.session import init_db
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application lifecycle management."""
-    # Startup tasks (if any)
+    # Startup tasks: initialize database tables
+    await init_db()
     yield
     # Shutdown tasks (if any)
+
 
 
 def create_application() -> FastAPI:
@@ -33,11 +39,10 @@ def create_application() -> FastAPI:
         lifespan=lifespan,
     )
 
-    # CORS Middleware with regex support for LAN and localhost development
+    # CORS Middleware
     app.add_middleware(
         CORSMiddleware,
         allow_origins=settings.CORS_ORIGINS,
-        allow_origin_regex=r"^https?://(localhost|127\.0\.0\.1|192\.168\.\d+\.\d+|10\.\d+\.\d+\.\d+|172\.(1[6-9]|2\d|3[0-1])\.\d+\.\d+)(:\d+)?$",
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
@@ -64,6 +69,22 @@ def create_application() -> FastAPI:
             content=ApiErrorResponse(
                 error=ApiErrorDetail(
                     code="CONFIGURATION_ERROR",
+                    message=exc.message,
+                    details=exc.details,
+                )
+            ).model_dump(),
+        )
+
+    @app.exception_handler(LLMQuotaExceededError)
+    async def llm_quota_handler(request: Request, exc: LLMQuotaExceededError):
+        """Return 429 with Retry-After so clients can back off gracefully."""
+        retry_after = int(getattr(exc, "retry_after_seconds", 60))
+        return JSONResponse(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            headers={"Retry-After": str(retry_after)},
+            content=ApiErrorResponse(
+                error=ApiErrorDetail(
+                    code="LLM_QUOTA_EXCEEDED",
                     message=exc.message,
                     details=exc.details,
                 )

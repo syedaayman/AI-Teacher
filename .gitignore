@@ -1,5 +1,7 @@
-# Environments
+# Environments & Secrets
 .env
+.env.*
+!.env.example
 .venv/
 env/
 venv/
@@ -9,11 +11,21 @@ __pycache__/
 *.py[cod]
 *$py.class
 *.pyc
+.mypy_cache/
+.ruff_cache/
 
 # Testing and Coverage
 .pytest_cache/
 .coverage
 htmlcov/
+
+# Dependencies
+node_modules/
+frontend/node_modules/
+
+# Build outputs
+dist/
+frontend/dist/
 
 # Local databases & storage
 *.db
@@ -22,7 +34,19 @@ htmlcov/
 chroma_data/
 data/
 
-# IDE files
+# Generated media & temp files
+*.log
+*.webm
+*.mp4
+*.wav
+scratch/
+temp/
+tmp/
+
+# OS & IDE files
+.DS_Store
+Thumbs.db
 .vscode/
 .idea/
 *.swp
+*.swo

@@ -162,7 +162,11 @@ class AnswerEvaluator:
             "   - 0.0: Completely incorrect or irrelevant\n"
             "2. Identify specific concepts demonstrated and concepts missing.\n"
             "3. Provide concrete evidence pointing to the student's text.\n"
-            "4. Provide constructive, encouraging feedback without overwhelming the student."
+            "4. Provide constructive, encouraging feedback without overwhelming the student.\n"
+            "5. Multilingual & Cross-Lingual Evaluation: The student may answer in English, Hindi (Devanagari script), "
+            "or Hinglish (conversational Hindi-English hybrid in Latin script). Evaluate the core conceptual correctness, "
+            "reasoning, and technical principles regardless of the language/script used, and never penalize a student "
+            "for answering in Hindi or Hinglish."
         )
 
         reasoning_context = f"\nStudent Reasoning: {student_answer.reasoning.strip()}" if student_answer.reasoning else ""
@@ -175,16 +179,84 @@ class AnswerEvaluator:
             f"Student Answer: {submission}{reasoning_context}"
         )
 
-        raw_eval = await self._gemini_client.generate_structured(
-            prompt=prompt,
-            response_schema=RawAnswerEvaluationResponse,
-            system_instruction=system_instruction,
-        )
+        try:
+            raw_eval = await self._gemini_client.generate_structured(
+                prompt=prompt,
+                response_schema=RawAnswerEvaluationResponse,
+                system_instruction=system_instruction,
+            )
 
-        # Clamp score and confidence to [0.0, 1.0]
-        clamped_score = max(0.0, min(1.0, float(raw_eval.score)))
-        clamped_conf = max(0.0, min(1.0, float(raw_eval.confidence)))
-        is_correct = clamped_score >= 0.75
+            # Clamp score and confidence to [0.0, 1.0]
+            clamped_score = max(0.0, min(1.0, float(raw_eval.score)))
+            clamped_conf = max(0.0, min(1.0, float(raw_eval.confidence)))
+            is_correct = clamped_score >= 0.75
+
+            eval_id = self.generate_evaluation_id(
+                question_id=question.question_id,
+                concept_id=question.concept_id,
+                student_response=submission,
+            )
+
+            return EvaluationResult(
+                evaluation_id=eval_id,
+                question_id=question.question_id,
+                concept_id=question.concept_id,
+                correctness=is_correct,
+                score=clamped_score,
+                confidence=clamped_conf,
+                expected_answer=question.correct_answer,
+                student_answer=submission,
+                concepts_tested=raw_eval.concepts_tested or [question.learning_objective],
+                concepts_demonstrated=raw_eval.concepts_demonstrated,
+                concepts_missing=raw_eval.concepts_missing,
+                reasoning_assessment=raw_eval.reasoning_assessment,
+                evidence=raw_eval.evidence,
+                feedback=raw_eval.feedback,
+            )
+        except Exception as ex:
+            logger.warning("LLM answer evaluation failed, using deterministic fallback: %s", ex)
+            return self._deterministic_fallback_evaluation(question, student_answer, submission)
+
+    def _deterministic_fallback_evaluation(
+        self,
+        question: Question,
+        student_answer: StudentAnswer,
+        submission: str,
+    ) -> EvaluationResult:
+        """Deterministic keyword-overlap and length-based rubric evaluation when LLM is rate-limited/unavailable."""
+        sub_lower = submission.lower()
+        ref_lower = (question.correct_answer or "").lower()
+        obj_lower = (question.learning_objective or "").lower()
+
+        stop_words = {"this", "that", "with", "from", "have", "were", "what", "when", "where", "which", "there", "their", "about", "would", "could", "should"}
+        ref_words = {w for w in re.findall(r"\b[a-z]{4,}\b", ref_lower + " " + obj_lower) if w not in stop_words}
+        sub_words = {w for w in re.findall(r"\b[a-z]{4,}\b", sub_lower) if w not in stop_words}
+
+        overlap = ref_words.intersection(sub_words)
+        overlap_ratio = len(overlap) / max(1, min(len(ref_words), 8))
+        word_count = len(sub_lower.split())
+
+        if overlap_ratio >= 0.5 or (word_count >= 10 and len(overlap) >= 2):
+            score = 0.8
+            is_correct = True
+            concepts_demonstrated = [question.learning_objective]
+            concepts_missing = []
+            feedback = f"Good explanation! You captured the core principle. Full mechanism: {question.explanation}"
+            evidence = f"Identified key concepts: {', '.join(sorted(overlap)[:3]) if overlap else 'accurate reasoning'}."
+        elif overlap_ratio >= 0.25 or word_count >= 5:
+            score = 0.5
+            is_correct = False
+            concepts_demonstrated = [list(overlap)[0]] if overlap else []
+            concepts_missing = [question.learning_objective]
+            feedback = f"You are on the right track, but incomplete. Note: {question.explanation}"
+            evidence = f"Partial overlap on: {', '.join(sorted(overlap)) if overlap else 'brief explanation'}."
+        else:
+            score = 0.2
+            is_correct = False
+            concepts_demonstrated = []
+            concepts_missing = [question.learning_objective]
+            feedback = f"Not quite. The correct concept is: {question.explanation}"
+            evidence = "Student response lacks key conceptual mechanism keywords."
 
         eval_id = self.generate_evaluation_id(
             question_id=question.question_id,
@@ -197,16 +269,16 @@ class AnswerEvaluator:
             question_id=question.question_id,
             concept_id=question.concept_id,
             correctness=is_correct,
-            score=clamped_score,
-            confidence=clamped_conf,
+            score=score,
+            confidence=0.8,
             expected_answer=question.correct_answer,
             student_answer=submission,
-            concepts_tested=raw_eval.concepts_tested or [question.learning_objective],
-            concepts_demonstrated=raw_eval.concepts_demonstrated,
-            concepts_missing=raw_eval.concepts_missing,
-            reasoning_assessment=raw_eval.reasoning_assessment,
-            evidence=raw_eval.evidence,
-            feedback=raw_eval.feedback,
+            concepts_tested=[question.learning_objective],
+            concepts_demonstrated=concepts_demonstrated,
+            concepts_missing=concepts_missing,
+            reasoning_assessment="Deterministic conceptual rubric analysis (fallback).",
+            evidence=evidence,
+            feedback=feedback,
         )
 
 

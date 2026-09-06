@@ -54,6 +54,17 @@ from app.schemas.rag import (
     VectorStoreStats,
 )
 
+from app.schemas.session import (
+    AdvanceStepRequest,
+    InstructionalDelivery,
+    LessonSessionState,
+    SessionStatus,
+    SessionStepResponse,
+    StartSessionRequest,
+    SubmitAnswerRequest,
+    TeachingStep,
+)
+
 __all__ = [
     "HealthResponse",
     "ResponseMetadata",
@@ -96,4 +107,13 @@ __all__ = [
     "AdaptationDecision",
     "SupportedLanguage",
     "LearnerProfile",
+    "TeachingStep",
+    "SessionStatus",
+    "InstructionalDelivery",
+    "LessonSessionState",
+    "StartSessionRequest",
+    "SubmitAnswerRequest",
+    "AdvanceStepRequest",
+    "SessionStepResponse",
 ]
+

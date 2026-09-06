@@ -18,5 +18,5 @@ def get_gemini() -> GeminiClient:
 
 async def get_db() -> AsyncGenerator[AsyncSession, None]:
     """Dependency for database session injection."""
-    async for session in get_db_session():
+    async with get_db_session() as session:
         yield session

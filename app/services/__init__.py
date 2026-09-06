@@ -40,9 +40,21 @@ from app.services.question_generator import (
     QuestionGenerator,
     question_generator,
 )
-from app.services.rag_service import (
-    RAGService,
-    rag_service,
+from app.services.session_service import (
+    SessionService,
+    session_service,
+)
+from app.services.teacher_agent import (
+    TeacherAgent,
+    teacher_agent,
+)
+from app.services.teaching_content_engine import (
+    TeachingContentEngine,
+    teaching_content_engine,
+)
+from app.services.time_adaptive_planner import (
+    TimeAdaptivePlanner,
+    time_adaptive_planner,
 )
 
 __all__ = [
@@ -72,4 +84,13 @@ __all__ = [
     "adaptive_engine",
     "LearnerProfileService",
     "learner_profile_service",
+    "SessionService",
+    "session_service",
+    "TeacherAgent",
+    "teacher_agent",
+    "TeachingContentEngine",
+    "teaching_content_engine",
+    "TimeAdaptivePlanner",
+    "time_adaptive_planner",
 ]
+

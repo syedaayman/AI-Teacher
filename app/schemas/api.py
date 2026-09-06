@@ -149,3 +149,29 @@ class RecordAssessmentRequest(BaseModel):
     """Assessment score recording request."""
     learner_id: str = Field(min_length=1, description="Target learner ID")
     score: float = Field(ge=0.0, le=1.0, description="Assessment score")
+
+
+class SevenDayPlanRequest(BaseModel):
+    """Request to generate a personalized 7-day learning schedule."""
+    topic: Optional[str] = Field(default="Course", description="Topic title")
+    document: Optional[ExtractedDocument] = Field(default=None, description="Material document if grounded")
+    daily_minutes: int = Field(default=30, ge=10, le=180, description="Available minutes per day")
+    learner_id: Optional[str] = Field(default=None, description="Optional learner ID for profile grounding")
+
+
+class VideoPlanRequest(BaseModel):
+    """Request for lesson teaching video storyboard and scene sequencing."""
+    topic: str = Field(description="Lesson topic")
+    concept_name: str = Field(description="Active concept name")
+    concept_id: Optional[str] = Field(default=None, description="Concept identifier")
+    delivery_content: Optional[str] = Field(default=None, description="Spoken teacher dialogue")
+    language: str = Field(default="english", description="Delivery language")
+
+
+class VideoGenerateRequest(BaseModel):
+    """Request to compose and render actual playable lesson video artifact."""
+    topic: str = Field(description="Lesson topic")
+    concept_name: str = Field(description="Active concept name")
+    scenes: Optional[List[dict]] = Field(default=None, description="Pre-planned scenes")
+    provider: Optional[str] = Field(default="local_canvas_composer", description="Preferred video provider")
+

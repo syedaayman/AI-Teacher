@@ -201,6 +201,174 @@ class LearnerProfileService:
         profile.updated_at = datetime.now(timezone.utc)
         return profile
 
+    # ----------------------------------------------------------------
+    # Async Database Persistence Operations
+    # ----------------------------------------------------------------
+
+    async def create_profile_db(
+        self,
+        session,
+        learner_id: str,
+        name: Optional[str] = None,
+        preferred_language: SupportedLanguage = SupportedLanguage.ENGLISH,
+        learning_goal: Optional[str] = None,
+        preferred_difficulty: DifficultyLevel = DifficultyLevel.INTERMEDIATE,
+        total_lessons: int = 0,
+        teaching_style: str = "interactive",
+        available_time_minutes: int = 20,
+        desired_depth: str = "standard",
+    ) -> LearnerProfile:
+        """Create learner profile persisted into relational database."""
+        from app.db.repository import LearnerRepository
+
+        repo = LearnerRepository(session)
+        learner = await repo.create_learner(
+            learner_id=learner_id,
+            name=name,
+            preferred_language=preferred_language.value if isinstance(preferred_language, SupportedLanguage) else str(preferred_language),
+            preferred_difficulty=preferred_difficulty.value if isinstance(preferred_difficulty, DifficultyLevel) else str(preferred_difficulty),
+            learning_goal=learning_goal,
+            teaching_style=teaching_style,
+            available_time_minutes=available_time_minutes,
+            desired_depth=desired_depth,
+            total_lessons=total_lessons,
+        )
+        profile = repo.to_learner_profile(learner)
+        self._profiles[profile.learner_id] = profile
+        return profile
+
+    async def get_profile_db(
+        self,
+        session,
+        learner_id: str,
+    ) -> LearnerProfile:
+        """Retrieve learner profile from relational database, falling back to cache if needed."""
+        from app.db.repository import LearnerRepository
+
+        clean_id = (learner_id or "").strip()
+        if not clean_id:
+            raise InvalidLearnerProfileError("learner_id cannot be empty or whitespace.")
+
+        repo = LearnerRepository(session)
+        learner = await repo.get_learner(clean_id)
+        if learner is not None:
+            profile = repo.to_learner_profile(learner)
+            self._profiles[clean_id] = profile
+            return profile
+
+        # Check local cache fallback
+        if clean_id in self._profiles:
+            return self._profiles[clean_id]
+
+        raise LearnerNotFoundError(f"Learner profile not found for ID '{clean_id}'.")
+
+    async def update_preferences_db(
+        self,
+        session,
+        learner_id: str,
+        preferred_language: Optional[SupportedLanguage] = None,
+        preferred_difficulty: Optional[DifficultyLevel] = None,
+        learning_goal: Optional[str] = None,
+        teaching_style: Optional[str] = None,
+        available_time_minutes: Optional[int] = None,
+        desired_depth: Optional[str] = None,
+    ) -> LearnerProfile:
+        """Update preferences persisted into database."""
+        from app.db.repository import LearnerRepository
+
+        clean_id = (learner_id or "").strip()
+        repo = LearnerRepository(session)
+        learner = await repo.get_learner(clean_id)
+        if learner is None:
+            # Fallback to in-memory if created purely in memory
+            return self.update_preferences(
+                learner_id=clean_id,
+                preferred_language=preferred_language,
+                preferred_difficulty=preferred_difficulty,
+                learning_goal=learning_goal,
+            )
+
+        lang_str = preferred_language.value if isinstance(preferred_language, SupportedLanguage) else (str(preferred_language) if preferred_language else None)
+        diff_str = preferred_difficulty.value if isinstance(preferred_difficulty, DifficultyLevel) else (str(preferred_difficulty) if preferred_difficulty else None)
+
+        await repo.update_preferences(
+            learner_id=clean_id,
+            preferred_language=lang_str,
+            preferred_difficulty=diff_str,
+            learning_goal=learning_goal,
+            teaching_style=teaching_style,
+            available_time_minutes=available_time_minutes,
+            desired_depth=desired_depth,
+        )
+        updated_learner = await repo.get_learner(clean_id)
+        profile = repo.to_learner_profile(updated_learner)
+        self._profiles[clean_id] = profile
+        return profile
+
+    async def update_mastery_db(
+        self,
+        session,
+        learner_id: str,
+        concept_mastery: ConceptMastery,
+    ) -> LearnerProfile:
+        """Persist updated ConceptMastery into database and return refreshed summary."""
+        from app.db.repository import LearnerRepository
+
+        clean_id = (learner_id or "").strip()
+        repo = LearnerRepository(session)
+        learner = await repo.get_learner(clean_id)
+        if learner is None:
+            return self.update_mastery(clean_id, concept_mastery)
+
+        await repo.upsert_concept_mastery(clean_id, concept_mastery)
+        refreshed = await repo.get_learner(clean_id)
+        profile = repo.to_learner_profile(refreshed)
+        self._profiles[clean_id] = profile
+        return profile
+
+    async def record_lesson_completion_db(
+        self,
+        session,
+        learner_id: str,
+        lesson_id: str,
+    ) -> LearnerProfile:
+        """Persist completed lesson ID into database."""
+        from app.db.repository import LearnerRepository
+
+        clean_id = (learner_id or "").strip()
+        repo = LearnerRepository(session)
+        learner = await repo.get_learner(clean_id)
+        if learner is None:
+            return self.record_lesson_completion(clean_id, lesson_id)
+
+        await repo.record_lesson_completion(clean_id, lesson_id)
+        refreshed = await repo.get_learner(clean_id)
+        profile = repo.to_learner_profile(refreshed)
+        self._profiles[clean_id] = profile
+        return profile
+
+    async def record_assessment_result_db(
+        self,
+        session,
+        learner_id: str,
+        score: float,
+    ) -> LearnerProfile:
+        """Persist assessment score and incremental running average into database."""
+        from app.db.repository import LearnerRepository
+
+        clean_id = (learner_id or "").strip()
+        repo = LearnerRepository(session)
+        learner = await repo.get_learner(clean_id)
+        if learner is None:
+            return self.record_assessment_result(clean_id, score)
+
+        await repo.record_assessment_score(clean_id, score)
+        refreshed = await repo.get_learner(clean_id)
+        profile = repo.to_learner_profile(refreshed)
+        self._profiles[clean_id] = profile
+        return profile
+
 
 # Singleton service instance
 learner_profile_service = LearnerProfileService()
+

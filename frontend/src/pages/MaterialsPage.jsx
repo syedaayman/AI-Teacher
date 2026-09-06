@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { api } from '../services/api';
 import { useTestSession } from '../context/TestSessionContext';
+import LoadingSpinner from '../components/LoadingSpinner';
 
 export default function MaterialsPage() {
   const { session, updateSession } = useTestSession();
@@ -131,7 +132,11 @@ export default function MaterialsPage() {
             </div>
 
             <button type="submit" className="btn btn-primary" disabled={loading || !file} style={{ width: '100%' }}>
-              {loading ? '⏳ Processing Material...' : '⚙️ Process Material'}
+              {loading ? (
+                <LoadingSpinner inline={true} size="small" text="Processing Material..." color="text-white" />
+              ) : (
+                '⚙️ Process Material'
+              )}
             </button>
           </form>
         </div>

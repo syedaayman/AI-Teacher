@@ -127,7 +127,7 @@ APP_ENV=development
 DEBUG=true
 
 GEMINI_API_KEY=your_gemini_api_key_here
-GEMINI_MODEL=gemini-flash-latest
+GEMINI_MODEL=gemini-2.5-flash
 GEMINI_EMBEDDING_MODEL=gemini-embedding-001
 
 DATABASE_URL=sqlite+aiosqlite:///./ai_brain.db
@@ -136,38 +136,45 @@ CHROMA_PERSIST_DIRECTORY=./chroma_data
 
 ---
 
-## Running the Backend & Frontend
+## Running the Application
+
+### Prerequisites
+- Python 3.10+
+- Node.js 18+ (with npm)
+- Google Gemini API Key (from [Google AI Studio](https://aistudio.google.com/apikey))
 
 ### 1. Start the FastAPI Backend
 ```bash
-# Windows PowerShell / CMD:
-.venv\Scripts\python -m uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+# Activate virtual environment:
+# Windows: .venv\Scripts\activate
+# Linux/macOS: source .venv/bin/activate
 
-# Linux / macOS:
-uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+uvicorn main:app --reload --host 0.0.0.0 --port 8001
 ```
-Interactive API documentation (Swagger UI): `http://localhost:8000/docs` (or `http://<your-lan-ip>:8000/docs`).
+- API Endpoint: `http://localhost:8001`
+- Swagger Documentation: `http://localhost:8001/docs`
+- Health Check: `GET http://localhost:8001/api/v1/health`
 
-### 2. Start the Developer/Test Frontend Dashboard
+### 2. Start the Frontend Dashboard
 ```bash
 cd frontend
 npm install
-npm run dev -- --host
+npm run dev
 ```
-The dashboard will be available at:
-- Local: `http://localhost:5173`
-- Network/LAN: `http://<your-lan-ip>:5173` (e.g. `http://192.168.0.107:5173`)
+- Local Application: `http://localhost:5173`
 
-### 3. Frontend Environment Configuration (`frontend/.env`)
-```ini
-# For standard localhost development:
-VITE_API_BASE_URL=http://127.0.0.1:8000
-
-# When accessing frontend from other devices on your LAN:
-# VITE_API_BASE_URL=http://<your-lan-ip>:8000
+### 3. Frontend Production Build
+```bash
+cd frontend
+npm run build
 ```
+Build output is generated into `frontend/dist/`.
 
----
+### 4. Database & Storage Architecture
+- **Relational Database**: Default is asynchronous SQLite (`sqlite+aiosqlite:///./ai_brain.db`). Tables are automatically initialized on startup via `init_db()`. In containerized or cloud deployments, specify a persistent disk path or external database URL in `DATABASE_URL`.
+- **Vector Database**: Local Chroma persistence in `./chroma_data` (configurable via `CHROMA_PERSIST_DIRECTORY`).
+- **Media & Video Export**: Lectures and animations are rendered and recorded client-side in the browser using Web Audio and Canvas MediaRecorder, exporting WebM video artifacts directly to the learner's device.
+- **Security**: The `GEMINI_API_KEY` is strictly server-side and never exposed to the client. Frontend communicates with the backend via `VITE_API_BASE_URL`.
 
 ## Document Processing & RAG Usage
 

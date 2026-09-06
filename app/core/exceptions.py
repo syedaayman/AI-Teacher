@@ -20,6 +20,18 @@ class LLMServiceError(AIBrainException):
     pass
 
 
+class LLMQuotaExceededError(LLMServiceError):
+    """Raised when the Gemini API returns 429 RESOURCE_EXHAUSTED (rate / quota limit).
+
+    Carries ``retry_after_seconds`` parsed from the API response so callers
+    and HTTP handlers can surface a proper ``Retry-After`` header.
+    """
+
+    def __init__(self, message: str, retry_after_seconds: float = 60.0, details=None):
+        super().__init__(message, details)
+        self.retry_after_seconds = retry_after_seconds
+
+
 class DatabaseError(AIBrainException):
     """Raised when a database query or session operation fails."""
     pass
@@ -170,7 +182,7 @@ class InvalidLearnerProfileError(LearnerProfileError):
     pass
 
 
-class LearnerNotFoundError(ResourceNotFoundError, LearnerProfileError):
+class LearnerNotFoundError(LearnerProfileError):
     """Raised when querying or updating a non-existent learner profile."""
     pass
 
@@ -178,4 +190,20 @@ class LearnerNotFoundError(ResourceNotFoundError, LearnerProfileError):
 class InvalidProfileUpdateError(LearnerProfileError):
     """Raised when attempting an unsupported or contradictory profile update."""
     pass
+
+
+class TeacherSessionError(AIBrainException):
+    """Base exception for active teaching session and orchestrator errors."""
+    pass
+
+
+class SessionNotFoundError(TeacherSessionError):
+    """Raised when a requested teaching session ID does not exist."""
+    pass
+
+
+class InvalidSessionStateError(TeacherSessionError):
+    """Raised when an operation is invalid for the current teaching session state."""
+    pass
+
 

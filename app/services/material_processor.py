@@ -84,55 +84,105 @@ class TextCleaner:
 
 
 class PDFExtractor:
-    """Extractor for Portable Document Format (PDF) files using pypdf."""
+    """Extractor for Portable Document Format (PDF) files using PyMuPDF (fitz) with pypdf fallback."""
 
     @staticmethod
     def extract(file_path: Path) -> Tuple[List[DocumentElement], Dict[str, Any]]:
+        elements: List[DocumentElement] = []
+        metadata: Dict[str, Any] = {}
+
+        # 1. Try PyMuPDF (fitz) as primary extractor
+        try:
+            import fitz
+            doc = fitz.open(str(file_path))
+            total_pages = len(doc)
+            metadata = {
+                "total_pages": total_pages,
+                "pdf_encrypted": doc.is_encrypted,
+                "extractor": "pymupdf",
+            }
+            current_chapter: Optional[str] = None
+            current_section: Optional[str] = None
+
+            for page_idx in range(total_pages):
+                page_number = page_idx + 1
+                try:
+                    page = doc[page_idx]
+                    raw_text = page.get_text("text") or ""
+                except Exception:
+                    raw_text = ""
+
+                cleaned = TextCleaner.clean(raw_text)
+                if not cleaned:
+                    continue
+
+                for line in cleaned.split("\n"):
+                    line_clean = line.strip()
+                    if re.match(r"^(Chapter\s+\d+|CHAPTER\s+[0-9IVXLCDM]+)", line_clean, re.IGNORECASE):
+                        current_chapter = line_clean
+                    elif re.match(r"^(Section\s+\d+(\.\d+)*|\d+\.\d+\s+[A-Za-z])", line_clean, re.IGNORECASE):
+                        current_section = line_clean
+
+                elements.append(
+                    DocumentElement(
+                        text=cleaned,
+                        page_number=page_number,
+                        chapter=current_chapter,
+                        section=current_section,
+                        source_metadata={"page_number": page_number, "total_pages": total_pages},
+                    )
+                )
+            doc.close()
+            if elements:
+                return elements, metadata
+        except Exception:
+            # Fallback to pypdf if fitz encounters issues
+            pass
+
+        # 2. Fallback to pypdf
         try:
             from pypdf import PdfReader
             reader = PdfReader(str(file_path))
-        except Exception as e:
-            raise DocumentProcessingError(f"Failed to read PDF file: {e}") from e
+            total_pages = len(reader.pages)
+            metadata = {
+                "total_pages": total_pages,
+                "pdf_encrypted": reader.is_encrypted,
+                "extractor": "pypdf",
+            }
+            current_chapter = None
+            current_section = None
 
-        total_pages = len(reader.pages)
-        elements: List[DocumentElement] = []
-        current_chapter: Optional[str] = None
-        current_section: Optional[str] = None
+            for page_idx, page in enumerate(reader.pages):
+                page_number = page_idx + 1
+                try:
+                    raw_text = page.extract_text() or ""
+                except Exception as e:
+                    raise DocumentProcessingError(f"Failed to extract text from PDF page {page_number}: {e}") from e
 
-        for page_idx, page in enumerate(reader.pages):
-            page_number = page_idx + 1
-            try:
-                raw_text = page.extract_text() or ""
-            except Exception as e:
-                raise DocumentProcessingError(f"Failed to extract text from PDF page {page_number}: {e}") from e
+                cleaned = TextCleaner.clean(raw_text)
+                if not cleaned:
+                    continue
 
-            cleaned = TextCleaner.clean(raw_text)
-            if not cleaned:
-                continue
+                for line in cleaned.split("\n"):
+                    line_clean = line.strip()
+                    if re.match(r"^(Chapter\s+\d+|CHAPTER\s+[0-9IVXLCDM]+)", line_clean, re.IGNORECASE):
+                        current_chapter = line_clean
+                    elif re.match(r"^(Section\s+\d+(\.\d+)*|\d+\.\d+\s+[A-Za-z])", line_clean, re.IGNORECASE):
+                        current_section = line_clean
 
-            # Check for chapter/section headings in the page text
-            for line in cleaned.split("\n"):
-                line_clean = line.strip()
-                if re.match(r"^(Chapter\s+\d+|CHAPTER\s+[0-9IVXLCDM]+)", line_clean, re.IGNORECASE):
-                    current_chapter = line_clean
-                elif re.match(r"^(Section\s+\d+(\.\d+)*|\d+\.\d+\s+[A-Za-z])", line_clean, re.IGNORECASE):
-                    current_section = line_clean
-
-            elements.append(
-                DocumentElement(
-                    text=cleaned,
-                    page_number=page_number,
-                    chapter=current_chapter,
-                    section=current_section,
-                    source_metadata={"page_number": page_number, "total_pages": total_pages},
+                elements.append(
+                    DocumentElement(
+                        text=cleaned,
+                        page_number=page_number,
+                        chapter=current_chapter,
+                        section=current_section,
+                        source_metadata={"page_number": page_number, "total_pages": total_pages},
+                    )
                 )
-            )
 
-        metadata = {
-            "total_pages": total_pages,
-            "pdf_encrypted": reader.is_encrypted,
-        }
-        return elements, metadata
+            return elements, metadata
+        except Exception as e:
+            raise DocumentProcessingError(f"Failed to extract text from PDF file: {e}") from e
 
 
 class DocxExtractor:

@@ -163,6 +163,21 @@ class RAGService:
 
         return retrieved_chunks
 
+    async def query_knowledge(
+        self,
+        query: str,
+        material_id: Optional[str] = None,
+        top_k: int = 5,
+        filter_metadata: Optional[Dict[str, Any]] = None,
+    ) -> List[RetrievedChunk]:
+        """Query knowledge base for relevant chunks (alias for search with material_id first)."""
+        return await self.search(
+            query=query,
+            top_k=top_k,
+            filter_metadata=filter_metadata,
+            material_id=material_id,
+        )
+
     def build_grounded_context(
         self,
         query: str,

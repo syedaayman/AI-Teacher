@@ -58,6 +58,8 @@ class MisconceptionDetector:
         evaluation_result: EvaluationResult,
         concept: Optional[Concept] = None,
         prerequisite_concepts: Optional[List[Concept]] = None,
+        concept_graph: Optional[Any] = None,
+        **kwargs: Any,
     ) -> MisconceptionAnalysis:
         """Analyze an answer evaluation to detect genuine conceptual or prerequisite flaws."""
         if not question:
@@ -94,7 +96,10 @@ class MisconceptionDetector:
             "   - Incomplete understanding: Student forgot a detail or gave an incomplete answer but has no flawed mental model (is_genuine_misconception = False).\n"
             "   - Conceptual Misconception: Student holds an actively incorrect mental model or fundamentally misinterprets the principle (is_genuine_misconception = True).\n"
             "   - Prerequisite Misconception: The student's error stems from a failure to understand an underlying prerequisite concept (is_prerequisite_flaw = True).\n"
-            "3. Provide clear evidence from the student's answer."
+            "3. Provide clear evidence from the student's answer.\n"
+            "4. Multilingual & Idiomatic Recognition: The student's answer and reasoning may be expressed in English, "
+            "Hindi (Devanagari), or Hinglish (conversational Latin script). Accurately diagnose whether an incorrect "
+            "mental model is present regardless of whether the phrasing uses Hindi or Hinglish technical idioms."
         )
 
         prompt = (
@@ -110,11 +115,45 @@ class MisconceptionDetector:
             "Diagnose whether any genuine conceptual or prerequisite misconceptions exist."
         )
 
-        raw_response = await self._gemini_client.generate_structured(
-            prompt=prompt,
-            response_schema=RawMisconceptionDetectionResponse,
-            system_instruction=system_instruction,
-        )
+        try:
+            raw_response = await self._gemini_client.generate_structured(
+                prompt=prompt,
+                response_schema=RawMisconceptionDetectionResponse,
+                system_instruction=system_instruction,
+            )
+        except Exception as ex:
+            logger.warning("LLM misconception detection failed, using deterministic fallback: %s", ex)
+            if evaluation_result.score < 0.6:
+                m_id = self.generate_misconception_id(
+                    concept_id=question.concept_id,
+                    question_id=question.question_id,
+                    description=f"Conceptual gap in {question.learning_objective}",
+                )
+                fallback_m = Misconception(
+                    misconception_id=m_id,
+                    concept_id=question.concept_id,
+                    description=f"Misunderstanding of key mechanism in {question.learning_objective}.",
+                    evidence=evaluation_result.evidence or "Student explanation omitted core conceptual mechanism.",
+                    severity=MisconceptionSeverity.MEDIUM,
+                    confidence=0.8,
+                    affected_concept_ids=[question.concept_id],
+                    source_question_id=question.question_id,
+                    source_evaluation_id=evaluation_result.evaluation_id,
+                    recommended_focus=question.explanation or question.learning_objective,
+                )
+                return MisconceptionAnalysis(
+                    detected=True,
+                    misconceptions=[fallback_m],
+                    overall_confidence=0.8,
+                    summary=f"Conceptual flaw detected in {question.learning_objective}.",
+                )
+            else:
+                return MisconceptionAnalysis(
+                    detected=False,
+                    misconceptions=[],
+                    overall_confidence=0.9,
+                    summary="No conceptual misconception detected.",
+                )
 
         if not raw_response.is_genuine_misconception or not raw_response.misconceptions:
             return MisconceptionAnalysis(

@@ -124,18 +124,25 @@ class ConceptService:
 
         prompt = f"Extract all academic concepts from the following learning material chunks:\n\n{full_context}"
 
-        raw_response = await self._gemini_client.generate_structured(
-            prompt=prompt,
-            response_schema=RawConceptExtractionResponse,
-            system_instruction=system_instruction,
-        )
+        try:
+            raw_response = await self._gemini_client.generate_structured(
+                prompt=prompt,
+                response_schema=RawConceptExtractionResponse,
+                system_instruction=system_instruction,
+            )
 
-        return self._transform_raw_concepts(
-            raw_concepts=raw_response.concepts,
-            material_id=mat_id,
-            chunk_map=chunk_map,
-            is_grounded=True,
-        )
+            return self._transform_raw_concepts(
+                raw_concepts=raw_response.concepts,
+                material_id=mat_id,
+                chunk_map=chunk_map,
+                is_grounded=True,
+            )
+        except Exception as exc:
+            logger.warning(
+                "Material concept extraction LLM call failed (%s). Using chunk-grounded fallback.",
+                exc,
+            )
+            return self._fallback_chunk_concepts(chunks, mat_id, chunk_map)
 
     # ----------------------------------------------------------------
     # Concept Extraction (Topic-Only)
@@ -167,18 +174,124 @@ class ConceptService:
 
         prompt = f"Design a comprehensive concept curriculum for the topic: '{topic.strip()}'"
 
-        raw_response = await self._gemini_client.generate_structured(
-            prompt=prompt,
-            response_schema=RawConceptExtractionResponse,
-            system_instruction=system_instruction,
-        )
+        try:
+            raw_response = await self._gemini_client.generate_structured(
+                prompt=prompt,
+                response_schema=RawConceptExtractionResponse,
+                system_instruction=system_instruction,
+            )
 
-        return self._transform_raw_concepts(
-            raw_concepts=raw_response.concepts,
-            material_id=None,
-            chunk_map={},
-            is_grounded=False,
-        )
+            return self._transform_raw_concepts(
+                raw_concepts=raw_response.concepts,
+                material_id=None,
+                chunk_map={},
+                is_grounded=False,
+            )
+        except Exception as exc:
+            logger.warning(
+                "Gemini topic concept extraction failed (%s). Using deterministic pedagogical fallback for '%s'",
+                exc,
+                topic,
+            )
+            return self._fallback_topic_concepts(topic.strip())
+
+    def _fallback_topic_concepts(self, topic: str) -> List[Concept]:
+        """Generate structured deterministic pedagogical concepts when external LLM is unavailable."""
+        clean_topic = topic.strip()
+        names = [
+            f"Foundations of {clean_topic}",
+            f"Core Principles & Dynamics of {clean_topic}",
+            f"Applied Practice & Problem Solving in {clean_topic}",
+        ]
+        descriptions = [
+            f"Fundamental definitions, essential terminology, and context for {clean_topic}.",
+            f"Core mechanisms, processes, and structural dynamics underlying {clean_topic}.",
+            f"Hands-on application, problem analysis, and synthesis of {clean_topic}.",
+        ]
+        difficulties = [
+            DifficultyLevel.BEGINNER,
+            DifficultyLevel.INTERMEDIATE,
+            DifficultyLevel.ADVANCED,
+        ]
+        objectives_list = [
+            [
+                f"Define essential principles and vocabulary of {clean_topic}",
+                f"Identify primary components and structural elements of {clean_topic}",
+            ],
+            [
+                f"Explain key operating mechanisms and workflows in {clean_topic}",
+                f"Analyze core relationships and interactions within {clean_topic}",
+            ],
+            [
+                f"Apply {clean_topic} concepts to evaluate and solve structured problems",
+                f"Assess trade-offs, edge cases, and real-world outcomes in {clean_topic}",
+            ],
+        ]
+
+        concepts: List[Concept] = []
+        prev_id = None
+        for i in range(len(names)):
+            c_id = self.generate_concept_id(names[i])
+            prereqs = [prev_id] if prev_id else []
+            concepts.append(
+                Concept(
+                    concept_id=c_id,
+                    name=names[i],
+                    description=descriptions[i],
+                    difficulty=difficulties[i],
+                    learning_objectives=objectives_list[i],
+                    prerequisite_concept_ids=prereqs,
+                    related_concept_ids=[],
+                    source_chunk_ids=[],
+                    source_metadata={"origin": "deterministic_pedagogical_fallback"},
+                )
+            )
+            prev_id = c_id
+        return concepts
+
+    def _fallback_chunk_concepts(
+        self,
+        chunks: List[DocumentChunk],
+        material_id: Optional[str],
+        chunk_map: Dict[str, DocumentChunk],
+    ) -> List[Concept]:
+        """Construct grounded concepts directly from document chunks when LLM is unavailable."""
+        concepts: List[Concept] = []
+        used_names = set()
+        prev_id = None
+        for idx, chunk in enumerate(chunks[:5]):
+            section_title = chunk.section or chunk.chapter or f"Core Topic Part {idx + 1}"
+            if section_title in used_names:
+                section_title = f"{section_title} (Section {idx + 1})"
+            used_names.add(section_title)
+
+            c_id = self.generate_concept_id(section_title, material_id=material_id)
+            prereqs = [prev_id] if prev_id else []
+            first_sent = chunk.text.split(".")[0].strip()
+            desc = (
+                first_sent
+                if len(first_sent) > 20
+                else f"Fundamental study of {section_title} grounded in course material."
+            )
+
+            concepts.append(
+                Concept(
+                    concept_id=c_id,
+                    name=section_title,
+                    description=desc,
+                    difficulty=DifficultyLevel.BEGINNER if idx == 0 else DifficultyLevel.INTERMEDIATE,
+                    learning_objectives=[
+                        f"Explain key points of {section_title} based on learning text",
+                        f"Identify foundational principles described in source material",
+                    ],
+                    prerequisite_concept_ids=prereqs,
+                    related_concept_ids=[],
+                    source_chunk_ids=[chunk.chunk_id],
+                    source_metadata={"origin": "material_grounded_fallback"},
+                )
+            )
+            prev_id = c_id
+        return concepts or self._fallback_topic_concepts("Course Material")
 
     # ----------------------------------------------------------------
     # Raw Concept Transformation & ID Resolution
@@ -273,7 +386,7 @@ class ConceptService:
                         existing.prerequisite_concept_ids.append(pid)
                 for rid in related_ids:
                     if rid not in existing.related_concept_ids:
-                        existing.related_concept_ids.append(rid)
+                        existing.related_concept_ids.append(rel_id)
                 for chkid in source_chunk_ids:
                     if chkid not in existing.source_chunk_ids:
                         existing.source_chunk_ids.append(chkid)

@@ -506,6 +506,24 @@ class LessonPlanner:
         stem = re.sub(r"[_\-]+", " ", stem).strip()
         return stem.title() or "Course Syllabus"
 
+    def create_time_adaptive_syllabus(
+        self,
+        concept_graph: ConceptGraph,
+        title: str,
+        available_time_minutes: int = 20,
+        desired_depth: str = "standard",
+        material_id: Optional[str] = None,
+    ) -> Syllabus:
+        """Construct a time-budgeted adaptive syllabus calibrated for 5m, 20m, or 60m learning blocks."""
+        from app.services.time_adaptive_planner import time_adaptive_planner
+        return time_adaptive_planner.create_time_budgeted_syllabus(
+            concept_graph=concept_graph,
+            title=title,
+            available_time_minutes=available_time_minutes,
+            desired_depth=desired_depth,
+            material_id=material_id,
+        )
+
 
 # Singleton lesson planner instance
 lesson_planner = LessonPlanner()

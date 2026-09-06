@@ -4,10 +4,6 @@
     "tests",
     "main.py"
   ],
-  "venvPath": "c:/Users/DELL/Desktop/AI Brain",
-  "venv": ".venv",
-  "extraPaths": [
-    "c:/Users/DELL/Desktop/AI Brain",
-    "c:/Users/DELL/Desktop/AI Brain/.venv/Lib/site-packages"
-  ]
+  "venvPath": ".",
+  "venv": ".venv"
 }

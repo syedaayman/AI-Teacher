@@ -3,6 +3,8 @@ from enum import Enum
 from typing import Any, Dict, List, Optional
 from pydantic import BaseModel, Field
 
+from app.schemas.adaptive import MasteryLevel
+from app.schemas.learner import SupportedLanguage
 from app.schemas.lesson import DifficultyLevel
 
 
@@ -38,7 +40,15 @@ class Question(BaseModel):
         description="Available multiple choice options (populated for MCQ, empty for open-ended)"
     )
     correct_answer: str = Field(description="The reference correct answer or expected response")
+    correct_answer_index: Optional[int] = Field(
+        default=None,
+        description="Index of correct option in options list for MCQ questions"
+    )
     explanation: str = Field(description="Detailed pedagogical explanation of the correct solution")
+    misconception_hints: List[str] = Field(
+        default_factory=list,
+        description="Pedagogical hints identifying potential learner misconceptions"
+    )
     evaluation_rubric: Optional[str] = Field(
         default=None,
         description="Scoring criteria and acceptable alternative formulations"
@@ -169,7 +179,15 @@ class RawGeneratedQuestion(BaseModel):
         description="Options for MCQ, empty for other types"
     )
     correct_answer: str = Field(description="Expected correct answer")
+    correct_answer_index: Optional[int] = Field(
+        default=None,
+        description="Index of correct option in options list for MCQ questions"
+    )
     explanation: str = Field(description="Explanation of correct answer")
+    misconception_hints: List[str] = Field(
+        default_factory=list,
+        description="Pedagogical hints identifying potential learner misconceptions"
+    )
     evaluation_rubric: Optional[str] = Field(default=None, description="Evaluation rubric")
 
 
@@ -248,3 +266,102 @@ class RawMisconceptionDetectionResponse(BaseModel):
         description="List of detected misconceptions"
     )
     summary: str = Field(description="Brief diagnosis summary")
+
+
+# ====================================================================
+# Final Assessment & Learning Report Schemas
+# ====================================================================
+
+class ConceptReportItem(BaseModel):
+    """Per-concept mastery breakdown within an assessment report."""
+    concept_id: str = Field(description="Unique concept identifier")
+    concept_name: str = Field(description="Human-readable concept name")
+    score: float = Field(ge=0.0, le=1.0, description="Normalized score on this concept (0.0 to 1.0)")
+    mastery_level: MasteryLevel = Field(description="Achieved mastery level")
+    status: str = Field(description="Status label: 'mastered', 'in_progress', or 'needs_review'")
+    attempts: int = Field(default=1, description="Number of questions evaluated for this concept")
+
+
+class AssessmentReport(BaseModel):
+    """Comprehensive diagnostic learning report generated upon assessment completion."""
+    report_id: str = Field(description="Unique report identifier")
+    learner_id: str = Field(description="Learner identifier")
+    session_id: Optional[str] = Field(default=None, description="Associated session log ID")
+    lesson_id: Optional[str] = Field(default=None, description="Associated lesson ID")
+    overall_score: float = Field(ge=0.0, le=1.0, description="Overall weighted score across all evaluated concepts")
+    overall_mastery_level: MasteryLevel = Field(description="Overall mastery classification")
+    letter_grade: str = Field(description="Academic grade: A+, A, B, C, D, or F")
+    total_questions: int = Field(description="Total assessment questions evaluated")
+    correct_answers: int = Field(description="Number of questions answered correctly (score >= 0.75)")
+    concept_breakdowns: List[ConceptReportItem] = Field(
+        default_factory=list,
+        description="Detailed performance breakdown per concept"
+    )
+    misconceptions_detected: List[Misconception] = Field(
+        default_factory=list,
+        description="All diagnosed misconceptions with pedagogical evidence and severity"
+    )
+    strengths: List[str] = Field(
+        default_factory=list,
+        description="Key conceptual strengths demonstrated during the assessment"
+    )
+    weaknesses: List[str] = Field(
+        default_factory=list,
+        description="Concepts or areas requiring targeted review and reinforcement"
+    )
+    recommendations: List[str] = Field(
+        default_factory=list,
+        description="Actionable next-step study items and remediation advice"
+    )
+    summary: str = Field(description="Executive pedagogical summary of learner performance")
+    language: SupportedLanguage = Field(
+        default=SupportedLanguage.ENGLISH,
+        description="Language in which the report summary and recommendations are phrased"
+    )
+    generated_at: str = Field(
+        default_factory=lambda: datetime.now(timezone.utc).isoformat(),
+        description="ISO 8601 generation timestamp"
+    )
+
+
+class FinalAssessmentRequest(BaseModel):
+    """Request payload for generating a multi-concept final assessment package."""
+    learner_id: str = Field(description="Learner ID")
+    lesson_id: Optional[str] = Field(default=None, description="Lesson ID to assess")
+    session_id: Optional[str] = Field(default=None, description="Active session ID if continuing from a live session")
+    concept_ids: List[str] = Field(default_factory=list, description="Target concept IDs to include in the exam")
+    num_questions: int = Field(default=5, ge=1, le=20, description="Total number of assessment questions to generate")
+    difficulty: DifficultyLevel = Field(default=DifficultyLevel.INTERMEDIATE, description="Baseline question difficulty")
+    language: SupportedLanguage = Field(default=SupportedLanguage.ENGLISH, description="Target instructional language")
+
+
+class FinalAssessmentPackage(BaseModel):
+    """Collection of assessment questions delivered to the student."""
+    assessment_id: str = Field(description="Unique exam session identifier")
+    learner_id: str = Field(description="Learner ID")
+    lesson_id: Optional[str] = Field(default=None, description="Lesson ID")
+    session_id: Optional[str] = Field(default=None, description="Session ID")
+    questions: List[Question] = Field(default_factory=list, description="Ordered assessment questions")
+    total_questions: int = Field(description="Total question count")
+    created_at: str = Field(
+        default_factory=lambda: datetime.now(timezone.utc).isoformat(),
+        description="ISO 8601 generation timestamp"
+    )
+
+
+class FinalAssessmentSubmission(BaseModel):
+    """Student submission of all answered questions for a final assessment."""
+    assessment_id: str = Field(description="Assessment package ID being submitted")
+    learner_id: str = Field(description="Learner ID")
+    session_id: Optional[str] = Field(default=None, description="Session ID")
+    lesson_id: Optional[str] = Field(default=None, description="Lesson ID")
+    answers: List[StudentAnswer] = Field(default_factory=list, description="Answers submitted by the learner")
+    language: SupportedLanguage = Field(default=SupportedLanguage.ENGLISH, description="Instructional language")
+
+
+class RawAssessmentReportPayload(BaseModel):
+    """Structured LLM output schema for generating diagnostic assessment summaries."""
+    summary: str = Field(description="Executive pedagogical summary of performance")
+    strengths: List[str] = Field(description="List of observed conceptual strengths")
+    weaknesses: List[str] = Field(description="List of areas needing improvement")
+    recommendations: List[str] = Field(description="Actionable study recommendations")

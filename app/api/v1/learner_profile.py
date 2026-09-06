@@ -1,5 +1,7 @@
-from fastapi import APIRouter, status
+from fastapi import APIRouter, Depends, status
+from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.deps import get_db
 from app.schemas.api import (
     CreateProfileRequest,
     RecordAssessmentRequest,
@@ -19,9 +21,13 @@ router = APIRouter(prefix="/learner-profile", tags=["Learner Profile"])
     status_code=status.HTTP_201_CREATED,
     summary="Create new learner profile",
 )
-def create_profile(req: CreateProfileRequest) -> LearnerProfile:
-    """Initialize a new learner profile."""
-    return learner_profile_service.create_profile(
+async def create_profile(
+    req: CreateProfileRequest,
+    db: AsyncSession = Depends(get_db),
+) -> LearnerProfile:
+    """Initialize a new learner profile persisted to database."""
+    return await learner_profile_service.create_profile_db(
+        session=db,
         learner_id=req.learner_id,
         name=req.name,
         preferred_language=req.preferred_language,
@@ -37,9 +43,12 @@ def create_profile(req: CreateProfileRequest) -> LearnerProfile:
     status_code=status.HTTP_200_OK,
     summary="Get learner profile by ID",
 )
-def get_profile(learner_id: str) -> LearnerProfile:
-    """Retrieve learner profile."""
-    return learner_profile_service.get_profile(learner_id)
+async def get_profile(
+    learner_id: str,
+    db: AsyncSession = Depends(get_db),
+) -> LearnerProfile:
+    """Retrieve learner profile from database or cache."""
+    return await learner_profile_service.get_profile_db(session=db, learner_id=learner_id)
 
 
 @router.post(
@@ -48,9 +57,13 @@ def get_profile(learner_id: str) -> LearnerProfile:
     status_code=status.HTTP_200_OK,
     summary="Update learner preferences and goal",
 )
-def update_preferences(req: UpdatePreferencesRequest) -> LearnerProfile:
-    """Update preferred language, difficulty, or learning goal."""
-    return learner_profile_service.update_preferences(
+async def update_preferences(
+    req: UpdatePreferencesRequest,
+    db: AsyncSession = Depends(get_db),
+) -> LearnerProfile:
+    """Update preferred language, difficulty, or learning goal in database."""
+    return await learner_profile_service.update_preferences_db(
+        session=db,
         learner_id=req.learner_id,
         preferred_language=req.preferred_language,
         preferred_difficulty=req.preferred_difficulty,
@@ -64,9 +77,13 @@ def update_preferences(req: UpdatePreferencesRequest) -> LearnerProfile:
     status_code=status.HTTP_200_OK,
     summary="Update learner concept mastery and recompute summary",
 )
-def update_mastery(req: UpdateMasteryRequest) -> LearnerProfile:
-    """Incorporate ConceptMastery into profile and update aggregate metrics."""
-    return learner_profile_service.update_mastery(
+async def update_mastery(
+    req: UpdateMasteryRequest,
+    db: AsyncSession = Depends(get_db),
+) -> LearnerProfile:
+    """Incorporate ConceptMastery into database and update aggregate metrics."""
+    return await learner_profile_service.update_mastery_db(
+        session=db,
         learner_id=req.learner_id,
         concept_mastery=req.concept_mastery,
     )
@@ -78,9 +95,13 @@ def update_mastery(req: UpdateMasteryRequest) -> LearnerProfile:
     status_code=status.HTTP_200_OK,
     summary="Record completed lesson",
 )
-def record_lesson(req: RecordLessonRequest) -> LearnerProfile:
-    """Record completed lesson ID."""
-    return learner_profile_service.record_lesson_completion(
+async def record_lesson(
+    req: RecordLessonRequest,
+    db: AsyncSession = Depends(get_db),
+) -> LearnerProfile:
+    """Record completed lesson ID in database."""
+    return await learner_profile_service.record_lesson_completion_db(
+        session=db,
         learner_id=req.learner_id,
         lesson_id=req.lesson_id,
     )
@@ -92,9 +113,14 @@ def record_lesson(req: RecordLessonRequest) -> LearnerProfile:
     status_code=status.HTTP_200_OK,
     summary="Record assessment score and increment running average",
 )
-def record_assessment(req: RecordAssessmentRequest) -> LearnerProfile:
-    """Record assessment score."""
-    return learner_profile_service.record_assessment_result(
+async def record_assessment(
+    req: RecordAssessmentRequest,
+    db: AsyncSession = Depends(get_db),
+) -> LearnerProfile:
+    """Record assessment score and persist running average to database."""
+    return await learner_profile_service.record_assessment_result_db(
+        session=db,
         learner_id=req.learner_id,
         score=req.score,
     )
+
